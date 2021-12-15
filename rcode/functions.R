@@ -1,3 +1,4 @@
+
 ac12p <- function(x) {
     a <- rep(NA, length(x))
     for (j in 12:length(x))
