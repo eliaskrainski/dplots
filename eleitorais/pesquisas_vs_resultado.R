@@ -163,9 +163,6 @@ plot1fn <- function() {
         }
         segments(D1b+8, r1[k], D1b+9, r1[k], pch = "-", col = cores[k], lwd = 2)
     }
-#    text(tail(prd1[[k]]$Date,1)+1.5,
- #        tail(prd1[[k]]$fit, 1),
-  #       format(tail(prd1[[k]]$fit,1), digits = 4), col = 'gray')
     text(rep(D1b+12, length(kk)), (r1+c(0,0,-.3,0,0,1,0))[kk],
          format(r1[kk]), col = cores[kk])
     legend("top", clabs[c(1,2,length(clabs))],
@@ -369,10 +366,6 @@ for(k in c(1,2,3)) {
                 c(prd26t1[[k]]$low, rev(prd26t1[[k]]$upp), prd26t1[[k]]$low[1]),
                 col = gray(0.5,.5), border = 'transparent')
     }
-#    text(tail(prd26t1[[k]]$Date,1)+2.5,
- #        tail(prd26t1[[k]]$fit, 1),
-  #       format(tail(prd26t1[[k]]$fit,1), digits = 4),
-   #      col = cores2[k])
 }
 legend("top", colnames(d26t1)[jj26t1], 
        ncol = 3, lty = 1, lwd = 2,
@@ -403,10 +396,6 @@ for(k in c(1,2,3)) {
                 c(prd26t2[[k]]$low, rev(prd26t2[[k]]$upp), prd26t2[[k]]$low[1]),
                 col = gray(0.5,.5), border = 'transparent')
     }
-#    text(tail(prd26t2[[k]]$Date,1)+2.5,
- #        tail(prd26t2[[k]]$fit, 1),
-  #       format(tail(prd26t2[[k]]$fit,1), digits = 4),
-   #      col = cores2[k])
 }
 legend("top", colnames(d26t2)[jj26t2], 
        ncol = 3, lty = 1, lwd = 2,
