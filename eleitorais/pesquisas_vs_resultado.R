@@ -1,210 +1,140 @@
-
-setwd(here::here("eleitorais"))
-getwd()
-
 library(splines)
 
-cbs <- function(...) {
-    bb <- bs(...)
-### join 1st with 2nd, and last two
-    k <- ncol(bb)-2
+setwd(here::here("eleitorais"))
+
+correctedBS2 <- function(x, knots) {
+    bb <- bs(x = x, knots = knots, degree = 2)
+    k <- ncol(bb) -2
     B <- bb[, 2:(k+1)]
-    B[,1] <- bb[,1] + bb[,2]
-    B[,k] <- bb[,k+1] + bb[,k+2]
+    B[, 1] <- bb[, 1] + bb[, 2]
+    B[, k] <- bb[, k+1] + bb[, k+2]
     colnames(B) <- paste0("B", 1:k)
     return(B)
 }
-bplot <- function(B, x) {
-    if(missing(x)||is.null(x))
-        x <- 1:nrow(B)
+basisPlot <- function(x, B) {
     plot(x, B[,1], type = 'n')
     for(k in 1:ncol(B))
         lines(x, B[,k])
 }
+fitsPredsFn <- function(ydata, Dmax) {
+    Date <- ydata[, ncol(ydata)]
+    ydata <- ydata[, 1:(ncol(ydata)-1), drop = FALSE]
+    dmin <- min(Date)
+    D0 <- rev(seq(Dmax, dmin - 1, -1))
+    iday <- as.integer(difftime(Date, dmin, units = "day"))+1
+    iday0 <- as.integer(difftime(D0, dmin, units = "day"))+1
+    bk0 <- rev(seq(max(iday0), -5, -10))
+    B <- correctedBS2(x = iday0, knots = bk0)
+    ff <- update(y ~ 1, paste(".~.+", paste0(colnames(B), collapse = "+")))
+    fits <- lapply(ydata, function(y)
+        lm(ff, data = data.frame(B[iday, ], y = y)))
+    preds <- lapply(fits, function(m) {
+        prd <- predict(m, newdata = as.data.frame(B),
+                       type = "response", se.fit = TRUE)
+        prd$Date <- D0
+        prd$low <- prd$fit - 1.96 * prd$se.fit
+        prd$upp <- prd$fit + 1.96 * prd$se.fit
+        return(prd)
+    })
+    return(preds)
+}
+datFitPlotfn <- function(ydat, prd, ylim, xlim, col, fill, xlab, ylab) {
+    Date <- ydat[, ncol(ydat)]
+    ydat <- ydat[, 1:(ncol(ydat)-1), drop = FALSE]
+    if(missing(xlim) || is.null(xlim))
+        xlim <- range(Date) + c(0, 10)
+    if(missing(ylim) || is.null(ylim))
+        ylim <- c(0, max(y, na.rm=TRUE))
+    plot(Date, rep(50, length(Date)), type = "n",
+         xlim = xlim, ylim = ylim, xlab = xlab, ylab = ylab)
+    for(k in 1:length(prd)) {
+        points(Date, ydat[, k], col = col[k], pch = 19)
+        np <- length(prd[[k]]$fit)
+        polygon(prd[[k]]$Date[c(1:np, np:1, 1)],
+                c(prd[[k]]$low, rev(prd[[k]]$upp), prd[[k]]$low[1]),
+                col = fill[k], border = 'transparent')
+        lines(prd[[k]]$Date, prd[[k]]$fit,
+              col = col[k], lty = 1, lwd = 2)
+    }
+}
 
-fls <- paste0("pesquisas_", 1:2, "t.csv")
-names(fls) <- c("t1", "t2")
-url <- paste0("https://raw.githubusercontent.com/Nexo-Dados/",
+###########################################################################
+### Data from pesquisas eleitorais em 2022
+###########################################################################
+
+fls22 <- paste0("pesquisas_", 1:2, "t.csv")
+names(fls22) <- c("t1", "t2")
+url22 <- paste0("https://raw.githubusercontent.com/Nexo-Dados/",
               "pesquisas-presidenciais-2022/main/")
 
 for(i in 1:2)
-    if(!file.exists(fls[i]))
-        download.file(paste0(url, fls[i]), fls[i])
+    if(!file.exists(fls22[i]))
+        download.file(paste0(url22, fls22[i]), fls22[i])
 
-p1 <- read.csv(fls[1])
-p2 <- read.csv(fls[2])
-(n1 <- nrow(p1))
-(n2 <- nrow(p2))
+dat22a <- lapply(fls22, read.csv)
+n22 <- sapply(dat22a, nrow)
 
-head(p1,2)
-head(p2,2)
+head(dat22a[[1]],3)
+head(dat22a[[2]],3)
 
-clabs <- c(colnames(p1)[c(5:10)], "OutBNI")
-p1$OutBNI <- rowSums(p1[clabs[3:6]])
-jj1 <- match(clabs, colnames(p1))
-names(jj1) <- clabs
-jj1
+dat22a[[1]]$"Outros + BNI" <- 100 - rowSums(dat22a[[1]][, 5:6])
+summary(dat22a[[1]]$"Outros + BNI")
+head(dat22a[[1]])
 
-D1 <- as.Date(p1$Data)
-D2 <- as.Date(p2$Data)
-D1a <- min(D1)
-D2a <- min(D2)
-D1b <- max(D1)
-D2b <- max(D2)
+jj22 <- list(c(5:6,11), c(5,6,7))
+dat22 <- list(t1 = dat22a[[1]][, jj22[[1]]],
+              t2 = dat22a[[2]][, jj22[[2]]])
+dat22[[1]]$Data <- as.Date(dat22a[[1]]$Data)
+dat22[[2]]$Data <- as.Date(dat22a[[2]]$Data)
 
-(nt1 <- as.integer(difftime(D1b, D1a-1, units = "days")))
-(nt2 <- as.integer(difftime(D2b, D2a-1, units = "days")))
-t1v <- 1:(nt1+1)
-t2v <- 1:(nt2+3)
+cores <- c("red", "green4", ##"orange", "blue", "brown", "gray",
+           "black")
 
-tail(D1a+t1v-1)
-tail(D2a+t2v-1)
+### RESULTADOS da eleicao em 2022
+ntot22 <- c(123682372, 124252796)
+nres22t1 <- c(Lula      = 57259504,
+              Bolsonaro = 51072345,
+              "Outros + BNI" =
+                  sum(c(Ciro      =  3599287,
+                        Tebet     =  4915423,
+                        Outros    = 600955+559708+81129+53519+45620+25625+16604,
+                        BNI       = 1964779 + 3487874)))
+result22 <- list(
+    "Turno 1" = 100 * (nres22t1/ntot22[1]),
+    "Turno 2" = c(Lula =      100 * (60345999 / ntot22[2]),
+                  Bolsonaro = 100 * (58206354 / ntot22[2]),
+                  BNI = 1.43+3.16)
+)
+sapply(result22, sum)
 
-p1$time <- as.integer(difftime(D1, D1a-1, units = 'days'))
-p2$time <- as.integer(difftime(D2, D2a-1, units = 'days'))
+Dmax22 <- as.Date(c("2022-10-02", "2022-10-30"))
 
-args(bs)
-B1 <- cbs(x = t1v, knots = seq(1, nt1+1, 10), degree = 2)
-B2 <- cbs(x = t2v, knots = seq(0, nt2+3, 10), degree = 2)
-
-colSums(B1)
-colSums(B2)
-
-dim(B1)
-dim(B2)
-
-par(mfrow = c(2, 1))
-bplot(B1, D1a+t1v)
-bplot(B2, D2a+t2v-1)
-
-f1 <- update(y ~ 1, paste(".~.+", paste(colnames(B1), collapse = "+")))
-f2 <- update(y ~ 1, paste(".~.+", paste(colnames(B2), collapse = "+")))
-
-head(p1)
-head(p2)
-
-
-fits1 <- lapply(jj1, function(j) {
-    dat <- as.data.frame(B1[p1$time, ])
-    dat$Date <- D1a + p1$time -1
-    dat$y <- p1[,j]
-    dat <- dat[complete.cases(dat),]
-    r <- lm(f1, data = dat)
-    r$Date <- dat$Date
-    r
-})
-
-fits2 <- lapply(jj1[1:3], function(j) {
-    dat <- as.data.frame(B2[p2$time, ])
-    dat$Date <- D2a + p2$time -1
-    dat$y <- p2[,j]
-    dat <- dat[complete.cases(dat),]
-    r <- lm(f2, data = dat)
-    r$Date <- dat$Date
-    r
-})
-
-prd1 <- lapply(fits1, function(x) {    
-    pred <- predict(x, newdata=as.data.frame(B1),
-                    type = 'response', se.fit = TRUE)
-    p <- data.frame(Date = D1a + t1v -1,
-                    fit = pred$fit)
-    p$low <- pred$fit - 1.96 * pred$se.fit
-    p$upp <- pred$fit + 1.96 * pred$se.fit
-    return(p)
-})
-
-prd2 <- lapply(fits2, function(x) {    
-    pred <- predict(x, newdata=as.data.frame(B2),
-                    type = 'response', se.fit = TRUE)
-    p <- data.frame(Date = D2a + t2v -1,
-                    fit = pred$fit)
-    p$low <- pred$fit - 1.96 * pred$se.fit
-    p$upp <- pred$fit + 1.96 * pred$se.fit
-    return(p)
-})
-
-
-cores <- c("red", "green4", "orange", "blue", "brown", "gray", "black")
-cores2 <- cores[c(1,2,length(cores))]
-
-r1 <- c(48.43, 43.2, 3.04, 4.16,
-        .51+.47+.07+.05+.04+.02+.01,
-        1.59+2.82)
-r1[length(r1)+1] <- sum(r1[3:length(r1)])
-r2 <- c(50.9, 49.1, 1.43+3.16)
-
-plot1fn <- function() {
-    plot(D1, rep(50, n1), xlim = c(D1a, D1b+5), ylim = c(0,55),
-         type = "n", xlab = "Data", ylab = "%")
-    abline(h = 10*(0:5), lty = 2, col = gray(0.5))
-    legend("topright", "", bty = "n", title = "Resultado\n2022\nTurno 1")
-    kk <- c(1,2,length(jj1)) ##1:length(jj1)
-    for(k in kk) {
-        points(D1, p1[, 4+k], pch = 19, cex = 2, col = cores[k])
-        lines(prd1[[k]]$Date, prd1[[k]]$fit, col = cores[k], lwd = 2)
-        if(k==1) {
-            np <- nrow(prd1[[k]])
-            polygon(prd1[[k]]$Date[c(1:np, np:1, 1)],
-                    c(prd1[[k]]$low, rev(prd1[[k]]$upp), prd1[[k]]$low[1]),
-                    col = rgb(1,.5,0,.5), border = 'transparent')
-        }
-        if(k==2) {
-            np <- nrow(prd1[[k]])
-            polygon(prd1[[k]]$Date[c(1:np, np:1, 1)],
-                    c(prd1[[k]]$low, rev(prd1[[k]]$upp), prd1[[k]]$low[1]),
-                    col = rgb(0,1,0,.5), border = 'transparent')
-        }
-        if(k==kk[length(kk)]) {
-            np <- nrow(prd1[[k]])
-            polygon(prd1[[k]]$Date[c(1:np, np:1, 1)],
-                    c(prd1[[k]]$low, rev(prd1[[k]]$upp), prd1[[k]]$low[1]),
-                    col = gray(0.5,.5), border = 'transparent')
-        }
-        segments(D1b+8, r1[k], D1b+9, r1[k], pch = "-", col = cores[k], lwd = 2)
-    }
-    text(rep(D1b+12, length(kk)), (r1+c(0,0,-.3,0,0,1,0))[kk],
-         format(r1[kk]), col = cores[kk])
-    legend("top", clabs[c(1,2,length(clabs))],
-       ncol = 3, lty = 1, lwd = 2, col = cores[c(1,2,length(clabs))], bty = "n")
-}
-plot2fn <- function() {
-    plot(D2, rep(50, n2), xlim = c(D2a, D2b+3), ylim = c(0,55),
-         type = "n", xlab = "Data", ylab = "%")
-    abline(h = 10*(0:5), lty = 2, col = gray(0.5))
-    legend("topright", "", bty = "n", title = "Resultado\n2022\nTurno 2")
-    for(k in c(1,2,3)) {
-        points(D2, p2[, 4+k], pch = 19, cex = 2, col = cores2[k])
-        lines(prd2[[k]]$Date, prd2[[k]]$fit, col = cores2[k], lwd = 2)
-        if(k==1) {
-            np <- nrow(prd2[[k]])
-            polygon(prd2[[k]]$Date[c(1:np, np:1, 1)],
-                    c(prd2[[k]]$low, rev(prd2[[k]]$upp), prd2[[k]]$low[1]),
-                    col = rgb(1,.5,0,.5), border = 'transparent')
-        }
-        if(k==2) {
-            np <- nrow(prd2[[k]])
-            polygon(prd2[[k]]$Date[c(1:np, np:1, 1)],
-                    c(prd2[[k]]$low, rev(prd2[[k]]$upp), prd2[[k]]$low[1]),
-                    col = rgb(0,1,0,.5), border = 'transparent')
-        }
-        if(k==3) {
-            np <- nrow(prd2[[k]])
-            polygon(prd2[[k]]$Date[c(1:np, np:1, 1)],
-                    c(prd2[[k]]$low, rev(prd2[[k]]$upp), prd2[[k]]$low[1]),
-                    col = gray(0.5,.5), border = 'transparent')
-        }
-        segments(D2b+4, r2[k], D2b+4.4, r2[k], pch = "-", col = cores2[k], lwd = 2)
-    }
-    text(rep(D2b+5.2, 3), r2, format(r2), col = cores2)
-}
-
-par(mfrow = c(2, 1), mar = c(3,3,0.5,2),
+png("pesquisas2022.png", 3000, 2000, res = 300)
+par(mfrow = c(2, 1), mar = c(3,3,0,0),
     mgp = c(2,1.0,0), bty = "n", las = 1)
-plot1fn()
-plot2fn()
+for(k in 1:2) {
+    prdk <- fitsPredsFn(dat22[[k]],  Dmax22[k])
+    datFitPlotfn(dat22[[k]], prdk, 
+                 ylim = c(0,55), xlim = range(dat22[[k]]$Data)+c(0,12),
+                 col = cores, fill = c(rgb(1:0, c(.5,1), c(0,.5), .5), gray(.5,.5)),
+                 xlab = "", ylab = "%")
+    abline(h = 10*(0:5), lty = 2, col = gray(0.5))
+    if(k==1)
+        legend("top", names(result22[[k]]), bty = "n",
+               ncol = 3, lty = 1, lwd = 2, col = cores)
+    legend("topleft", "", bty = "n",
+           title = paste("Pesquisas 2022 -", names(result22)[k]))
+    text(rep(max(dat22[[k]]$Data)+12, 3), result22[[k]],
+         format(result22[[k]], digits = 4), col = cores)
+    legend("topright", "", title = paste("Resultado 2022\nTurno", k), bty = 'n')
+}
+dev.off()
 
-### 2026: what will happens???
+system("eog pesquisas2022.png &")
+
+##################################################################################
+### Dados de pesquisas eleitorais em 2026
+##################################################################################
 
 library(jsonlite)
 
@@ -221,31 +151,22 @@ url26t2 <- paste0(
 
 if(!file.exists("bdj2026t1.rds")) {
     d26t1 <- as.data.frame(fromJSON(url26t1, flatten = TRUE))
+    colnames(d26t1) <- gsub("candidatos.", "", colnames(d26t1), fixed = TRUE)
+    d26t1$"Outros + BNI" <- 100-rowSums(d26t1[, 3:4], na.rm=TRUE)
     saveRDS(d26t1, "bdj2026t1.rds")
 } else {
     d26t1 <- readRDS("bdj2026t1.rds")
 }
 if(!file.exists("bdj2026t2.rds")){
     d26t2 <- as.data.frame(fromJSON(url26t2, flatten = TRUE))
+    colnames(d26t2) <- gsub("candidatos.", "", colnames(d26t2), fixed = TRUE)
+    d26t2$BNI <- 100-rowSums(d26t2[, 3:4], na.rm=TRUE)
     saveRDS(d26t2, "bdj2026t2.rds")
 } else {
     d26t2 <- readRDS("bdj2026t2.rds")
 }
 
-(n26t1 <- nrow(d26t1))
-(n26t2 <- nrow(d26t2))
-
-head(d26t1,3)
-head(d26t2,3)
-
-colnames(d26t1) <- gsub("candidatos.", "", colnames(d26t1), fixed = TRUE)
-colnames(d26t2) <- gsub("candidatos.", "", colnames(d26t2), fixed = TRUE)
-
-summary(rowSums(d26t1[, 3:ncol(d26t1)], na.rm=TRUE))
-
-d26t1$OutBNI <- 100-rowSums(d26t1[, 3:4], na.rm=TRUE)
-d26t2$OutBNI <- 100-rowSums(d26t2[, 3:4], na.rm=TRUE)
-
+## fix the data
 dfn <- function(x) {
     x <- gsub("Fev", "Feb", x)
     x <- gsub("Abr", "Apr", x)
@@ -260,149 +181,46 @@ dfn <- function(x) {
     as.Date(dspl, format = "%d %b %Y")
 }
 
-d26t1$Date <- dfn(d26t1$data)
-d26t2$Date <- dfn(d26t2$data)
 
-D26t1a <- min(d26t1$Date)
-D26t1b <- max(d26t1$Date)
-d26t1$time <- as.integer(difftime(d26t1$Date, D26t1a, units = "days"))+1
+dat26 <- list(t1 = d26t1[, c(3,4,ncol(d26t1))],
+              t2 = d26t2[,  c(3,4,ncol(d26t2))])
+dat26[[1]]$Data <- dfn(d26t1$data)
+dat26[[2]]$Data <- dfn(d26t2$data)
 
-D26t2a <- min(d26t2$Date)
-D26t2b <- max(d26t2$Date)
-d26t2$time <- as.integer(difftime(d26t2$Date, D26t2a, units = "days"))+1
+sapply(dat26, nrow)
 
-(nt26t1 <- as.integer(difftime(D26t1b, D26t1a-1, units = "days")))
-t26t1v <- 1:(nt26t1+2)
-tail(D26t1a+t26t1v-1)
+lapply(dat26, head, 2)
 
-(nt26t2 <- as.integer(difftime(D26t2b, D26t2a-1, units = "days")))
-t26t2v <- 1:(nt26t2+2)
-tail(D26t2a+t26t2v-1)
 
-nt26t1
-tail(seq(0, nt26t1+9, 10))
-B26t1 <- cbs(x = t26t1v, knots = seq(0, nt26t1+9, 10), degree = 2)
-
-nt26t2
-tail(seq(0, nt26t2+9, 10))
-B26t2 <- cbs(x = t26t2v, knots = seq(0, nt26t2+9, 10), degree = 2)
-
-jj26t1 <- c(3,4,11)
-jj26t2 <- c(3,4,5)
-
-f26t1 <- update(y ~ 1, paste(".~.+", paste(colnames(B26t1), collapse = "+")))
-f26t2 <- update(y ~ 1, paste(".~.+", paste(colnames(B26t2), collapse = "+")))
-
-fits26t1 <- lapply(jj26t1, function(j) {
-    dat <- as.data.frame(B26t1[d26t1$time, ])
-    dat$Date <- D26t1a + d26t1$time -1
-    dat$y <- d26t1[,j]
-    dat <- dat[complete.cases(dat),]
-    r <- lm(f26t1, data = dat)
-    r$Date <- dat$Date
-    r
-})
-
-fits26t2 <- lapply(jj26t2, function(j) {
-    dat <- as.data.frame(B26t2[d26t2$time, ])
-    dat$Date <- D26t2a + d26t2$time -1
-    dat$y <- d26t2[,j]
-    dat <- dat[complete.cases(dat),]
-    r <- lm(f26t2, data = dat)
-    r$Date <- dat$Date
-    r
-})
-
-prd26t1 <- lapply(fits26t1, function(x) {    
-    pred <- predict(x, newdata=as.data.frame(B26t1),
-                    type = 'response', se.fit = TRUE)
-    p <- data.frame(Date = D26t1a + t26t1v -1,
-                    fit = pred$fit)
-    p$low <- pred$fit - 1.96 * pred$se.fit
-    p$upp <- pred$fit + 1.96 * pred$se.fit
-    return(p)
-})
-
-prd26t2 <- lapply(fits26t2, function(x) {    
-    pred <- predict(x, newdata=as.data.frame(B26t2),
-                    type = 'response', se.fit = TRUE)
-    p <- data.frame(Date = D26t2a + t26t2v -1,
-                    fit = pred$fit)
-    p$low <- pred$fit - 1.96 * pred$se.fit
-    p$upp <- pred$fit + 1.96 * pred$se.fit
-    return(p)
-})
+alldat <- c(dat22, dat26)
+Dmin <- as.Date(c("2022-01-01", "2022-08-15",
+                  "2026-01-21", "2026-02-01"))
+Dmax <- as.Date(c("2022-10-02", "2022-10-30",
+                  "2026-10-04", "2026-10-04"))
 
 png("fourplots.png", 6000, 4000, res = 300)
 par(mfcol = c(2, 2), mar = c(3,3,0,0),
     mgp = c(2,1.0,0), bty = "n", las = 1)
-plot1fn()
-legend("topleft", "Pesquisas 2022 - Turno 1")
-plot2fn()
-legend("topleft", "Pesquisas 2022 - Turno 1")
-plot(d26t1$Date, rep(50, n26t1), xlim = c(D26t1a+70, D26t1b+3),
-     ylim = c(0,55), type = "n", xlab = "Data", ylab = "%")
-legend("topleft", "Pesquisas 2026 - Turno 1")
-abline(h = 10*(0:5), lty = 2, col = gray(0.5))
-for(k in c(1,2,3)) {
-    j <- jj26t1[k]
-    points(d26t1$Date, d26t1[, j], pch = 19, cex = 2, col = cores2[k])
-    lines(prd26t1[[k]]$Date, prd26t1[[k]]$fit, col = cores2[k], lwd = 2)
-    if(k==1) {
-        np <- nrow(prd26t1[[k]])
-        polygon(prd26t1[[k]]$Date[c(1:np, np:1, 1)],
-                c(prd26t1[[k]]$low, rev(prd26t1[[k]]$upp), prd26t1[[k]]$low[1]),
-                col = rgb(1,.5,0,.5), border = 'transparent')
-    }
-    if(k==2) {
-        np <- nrow(prd26t1[[k]])
-        polygon(prd26t1[[k]]$Date[c(1:np, np:1, 1)],
-                c(prd26t1[[k]]$low, rev(prd26t1[[k]]$upp), prd26t1[[k]]$low[1]),
-                col = rgb(0,1,0,.5), border = 'transparent')
-    }
-    if(k==3) {
-        np <- nrow(prd26t1[[k]])
-        polygon(prd26t1[[k]]$Date[c(1:np, np:1, 1)],
-                c(prd26t1[[k]]$low, rev(prd26t1[[k]]$upp), prd26t1[[k]]$low[1]),
-                col = gray(0.5,.5), border = 'transparent')
+for(k in 1:4) {
+    prdk <- fitsPredsFn(alldat[[k]], Dmax[k])
+    datFitPlotfn(alldat[[k]], prdk, 
+                 ylim = c(0,55), xlim = c(Dmin[k], Dmax[k]+12),
+                 col = cores, fill = c(rgb(1:0, c(.5,1), c(0,.5), .5), gray(.5,.5)),
+                 xlab = "", ylab = "%")
+    abline(h = 10*(0:5), lty = 2, col = gray(0.5))
+    if(k==1)
+        legend("top", names(result22[[k]]), bty = "n",
+               ncol = 3, lty = 1, lwd = 2, col = cores)
+    legend("topleft", "", bty = "n",
+           title = paste("Pesquisas", rep(c(2022, 2026), each = 2)[k],
+                         "\nTurno", c(1,2,1,2)[k]))
+    if(k<3) {
+        text(rep(max(alldat[[k]]$Data)+12, 3), result22[[k]],
+             format(result22[[k]], digits = 4), col = cores)
+        legend("topright", "", title = paste("Resultado 2022 \nTurno", k), bty = 'n')
     }
 }
-legend("top", colnames(d26t1)[jj26t1], 
-       ncol = 3, lty = 1, lwd = 2,
-       col = cores[c(1,2,length(clabs))], bty = "n")
-plot(d26t2$Date, rep(50, n26t2), xlim = c(D26t2a+70, D26t2b+3),
-     ylim = c(0,55), type = "n", xlab = "Data", ylab = "%")
-legend("topleft", "Pesquisas 2026 - Turno 2")
-abline(h = 10*(0:5), lty = 2, col = gray(0.5))
-for(k in c(1,2,3)) {
-    j <- jj26t2[k]
-    points(d26t2$Date, d26t2[, j], pch = 19, cex = 2, col = cores2[k])
-    lines(prd26t2[[k]]$Date, prd26t2[[k]]$fit, col = cores2[k], lwd = 2)
-    if(k==1) {
-        np <- nrow(prd26t2[[k]])
-        polygon(prd26t2[[k]]$Date[c(1:np, np:1, 1)],
-                c(prd26t2[[k]]$low, rev(prd26t2[[k]]$upp), prd26t2[[k]]$low[1]),
-                col = rgb(1,.5,0,.5), border = 'transparent')
-    }
-    if(k==2) {
-        np <- nrow(prd26t2[[k]])
-        polygon(prd26t2[[k]]$Date[c(1:np, np:1, 1)],
-                c(prd26t2[[k]]$low, rev(prd26t2[[k]]$upp), prd26t2[[k]]$low[1]),
-                col = rgb(0,1,0,.5), border = 'transparent')
-    }
-    if(k==3) {
-        np <- nrow(prd26t2[[k]])
-        polygon(prd26t2[[k]]$Date[c(1:np, np:1, 1)],
-                c(prd26t2[[k]]$low, rev(prd26t2[[k]]$upp), prd26t2[[k]]$low[1]),
-                col = gray(0.5,.5), border = 'transparent')
-    }
-}
-legend("top", colnames(d26t2)[jj26t2], 
-       ncol = 3, lty = 1, lwd = 2,
-       col = cores[c(1,2,length(clabs))], bty = "n")
 dev.off()
 
 system("eog fourplots.png &")
 
-tail(prd26t1[[1]], 1)
-tail(prd26t1[[2]], 1)
