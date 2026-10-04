@@ -16,14 +16,14 @@ basisPlot <- function(x, B) {
     for(k in 1:ncol(B))
         lines(x, B[,k])
 }
-fitsPredsFn <- function(ydata, Dmax) {
+predFn <- function(ydata, Dmax) {
     Date <- ydata[, ncol(ydata)]
     ydata <- ydata[, 1:(ncol(ydata)-1), drop = FALSE]
     dmin <- min(Date)
     D0 <- rev(seq(Dmax, dmin - 1, -1))
     iday <- as.integer(difftime(Date, dmin, units = "day"))+1
     iday0 <- as.integer(difftime(D0, dmin, units = "day"))+1
-    bk0 <- rev(seq(max(iday0), -5, -10))
+    bk0 <- rev(seq(max(iday0), -5, -20))
     B <- correctedBS2(x = iday0, knots = bk0)
     ff <- update(y ~ 1, paste(".~.+", paste0(colnames(B), collapse = "+")))
     fits <- lapply(ydata, function(y)
@@ -31,10 +31,31 @@ fitsPredsFn <- function(ydata, Dmax) {
     preds <- lapply(fits, function(m) {
         prd <- predict(m, newdata = as.data.frame(B),
                        type = "response", se.fit = TRUE)
-        prd$Date <- D0
+        prd <- data.frame(Date = D0, fit = prd$fit, se.fit = prd$se.fit)
         prd$low <- prd$fit - 1.96 * prd$se.fit
         prd$upp <- prd$fit + 1.96 * prd$se.fit
         return(prd)
+    })
+    return(preds)
+}
+predFn2 <- function(ydata, Dmax) {
+    Date <- ydata[, ncol(ydata)]
+    ydata <- ydata[, 1:(ncol(ydata)-1), drop = FALSE]
+    dmin <- min(Date)
+    D0 <- rev(seq(Dmax, dmin - 1, -1))
+    iday <- as.integer(difftime(Date, dmin, units = "day"))+1
+    ivalues <- as.integer(difftime(D0, dmin, units = "day"))+1
+    np <- length(ivalues)
+    ff <- y ~ 0 + f(i, model = "rw2", values = ivalues, constr = FALSE)
+    preds <- lapply(ydata, function(y) {
+        dat <- data.frame(i = c(ivalues, iday),
+                          y = c(rep(NA, np), y))
+        r <- inla(ff, data = dat)
+        fitt <- r$summary.fitted.values[1:np, ]
+        prd <- data.frame(
+            Date = D0, fit = fitt$mean,
+            low = fitt[, 3]-1.96*fitt$sd,
+            upp = fitt[, 5]+1.96*fitt$sd)
     })
     return(preds)
 }
@@ -107,15 +128,23 @@ result22 <- list(
 )
 sapply(result22, sum)
 
+res22 <- list(
+    "Turno 1" = 100 * nres22t1[1:2]/(ntot22[1] - (1964779 + 3487874)),
+    "Turno 2" = 100 * result22[[2]][1:2]/sum(result22[[2]][1:2]))
+res22
+
+Dmin22 <- as.Date(c("2022-01-01", "2022-08-15"))
 Dmax22 <- as.Date(c("2022-10-02", "2022-10-30"))
+
+Preds22 <- lapply(1:2, function(k)
+    predFn(dat22[[k]], Dmax22[k]))
 
 png("pesquisas2022.png", 3000, 2000, res = 300)
 par(mfrow = c(2, 1), mar = c(3,3,0,0),
     mgp = c(2,1.0,0), bty = "n", las = 1)
 for(k in 1:2) {
-    prdk <- fitsPredsFn(dat22[[k]],  Dmax22[k])
-    datFitPlotfn(dat22[[k]], prdk, 
-                 ylim = c(0,55), xlim = range(dat22[[k]]$Data)+c(0,12),
+    datFitPlotfn(dat22[[k]], Preds22b[[k]], 
+                 ylim = c(0,60), xlim = c(Dmin22[k], Dmax22[k]+20), 
                  col = cores, fill = c(rgb(1:0, c(.5,1), c(0,.5), .5), gray(.5,.5)),
                  xlab = "", ylab = "%")
     abline(h = 10*(0:5), lty = 2, col = gray(0.5))
@@ -124,9 +153,11 @@ for(k in 1:2) {
                ncol = 3, lty = 1, lwd = 2, col = cores)
     legend("topleft", "", bty = "n",
            title = paste("Pesquisas 2022 -", names(result22)[k]))
-    text(rep(max(dat22[[k]]$Data)+12, 3), result22[[k]],
+    legend("topright", "", title = paste("Resultado\nNom  Val"), bty = 'n')
+    text(rep(Dmax22[k]+10, 3), result22[[k]],
          format(result22[[k]], digits = 4), col = cores)
-    legend("topright", "", title = paste("Resultado 2022\nTurno", k), bty = 'n')
+    text(rep(Dmax22[k]+20, 2), res22[[k]],
+         format(res22[[k]], digits = 4), col = cores[1:2])
 }
 dev.off()
 
@@ -166,6 +197,10 @@ if(!file.exists("bdj2026t2.rds")){
     d26t2 <- readRDS("bdj2026t2.rds")
 }
 
+dat26 <- list(t1 = d26t1[, c(3,4,ncol(d26t1))],
+              t2 = d26t2[,  c(3,4,ncol(d26t2))])
+sapply(dat26, nrow)
+
 ## fix the data
 dfn <- function(x) {
     x <- gsub("Fev", "Feb", x)
@@ -180,31 +215,26 @@ dfn <- function(x) {
         substring(x[i], nch[i]-10))
     as.Date(dspl, format = "%d %b %Y")
 }
-
-
-dat26 <- list(t1 = d26t1[, c(3,4,ncol(d26t1))],
-              t2 = d26t2[,  c(3,4,ncol(d26t2))])
 dat26[[1]]$Data <- dfn(d26t1$data)
 dat26[[2]]$Data <- dfn(d26t2$data)
 
-sapply(dat26, nrow)
-
 lapply(dat26, head, 2)
 
-
 alldat <- c(dat22, dat26)
-Dmin <- as.Date(c("2022-01-01", "2022-08-15",
-                  "2026-01-21", "2026-02-01"))
-Dmax <- as.Date(c("2022-10-02", "2022-10-30",
-                  "2026-10-04", "2026-10-04"))
+Dmin <- as.Date(c(Dmin22, "2026-01-21", "2026-02-01"))
+Dmax <- as.Date(c(Dmax22, "2026-10-04", "2026-10-04"))
+yadd <- c(20,5,10,10)
+
+Preds26 <- lapply(1:2, function(k)
+    predFn(dat26[[k]], Dmax[2+k]))
 
 png("fourplots.png", 6000, 4000, res = 300)
 par(mfcol = c(2, 2), mar = c(3,3,0,0),
     mgp = c(2,1.0,0), bty = "n", las = 1)
 for(k in 1:4) {
-    prdk <- fitsPredsFn(alldat[[k]], Dmax[k])
+    prdk <- c(Preds22, Preds26)[[k]]
     datFitPlotfn(alldat[[k]], prdk, 
-                 ylim = c(0,55), xlim = c(Dmin[k], Dmax[k]+12),
+                 ylim = c(0,55), xlim = c(Dmin[k], Dmax[k]+yadd[k]),
                  col = cores, fill = c(rgb(1:0, c(.5,1), c(0,.5), .5), gray(.5,.5)),
                  xlab = "", ylab = "%")
     abline(h = 10*(0:5), lty = 2, col = gray(0.5))
@@ -215,12 +245,16 @@ for(k in 1:4) {
            title = paste("Pesquisas", rep(c(2022, 2026), each = 2)[k],
                          "\nTurno", c(1,2,1,2)[k]))
     if(k<3) {
-        text(rep(max(alldat[[k]]$Data)+12, 3), result22[[k]],
+        legend("topright", "", title = paste("Resultado\nNom  Val"), bty = 'n')
+        text(rep(Dmax22[k]+yadd[k]/2+2, 3), result22[[k]],
              format(result22[[k]], digits = 4), col = cores)
-        legend("topright", "", title = paste("Resultado 2022 \nTurno", k), bty = 'n')
+        text(rep(Dmax22[k]+yadd[k]+2, 2), res22[[k]],
+             format(res22[[k]], digits = 4), col = cores[1:2])
     }
 }
 dev.off()
 
 system("eog fourplots.png &")
 
+tail(Preds26[[1]]$Lula, 1)
+tail(Preds26[[1]]$Fl, 1)
