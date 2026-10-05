@@ -196,39 +196,9 @@ if(!file.exists("bdj2026t2.rds")){
     d26t2 <- readRDS("bdj2026t2.rds")
 }
 
-if(FALSE) {
-    
-    urlplc <- "https://www.placardaspesquisas.com.br/data/polls.csv"
-    
-    if(!file.exists("alldplc.csv"))
-        download.file(urlplc, "alldplc.csv")
-    
-    alldplc <- read.csv(
-        "alldplc.csv",
-        stringsAsFactors = FALSE,
-        check.names = FALSE
-    )
-    
-    table(alldplc$race, alldplc$round)
-    
-    dplc <- split(alldplc[alldplc$race == "presidente", ],
-                  alldplc[alldplc$race == "presidente",]["round"])
-    
-    sapply(dplc, dim)
-
-}
-
 dat26 <- list(t1 = d26t1[, c(3,4,ncol(d26t1))],
               t2 = d26t2[, c(3,4,ncol(d26t2))])
 sapply(dat26, nrow)
-
-if(FALSE) {
-    dAddT1 <- data.frame(
-        Lula = c(45, 46, 47.8, 43),
-        Flávio = c(42, 45, 42.1, 47))
-    dAddT1$"Outros + BNI" <- 100 -rowSums(dAddT1)
-    dat26$t1 <- rbind(dat26$t1, dAddT1)
-}
 
 ## fix the data
 dfn <- function(x) {
@@ -245,9 +215,7 @@ dfn <- function(x) {
     as.Date(dspl, format = "%d %b %Y")
 }
 
-dat26[[1]]$Data <- ##c(
-    dfn(d26t1$data)
-##                   , as.Date(rep("2026-10-03", nrow(dAddT1))))
+dat26[[1]]$Data <- dfn(d26t1$data)
 dat26[[2]]$Data <- dfn(d26t2$data)
 
 ##tail(d26t1[order(dat26[[1]]$Data), c(1,2,3,4, 10)], 10)
