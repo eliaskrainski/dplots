@@ -16,14 +16,14 @@ basisPlot <- function(x, B) {
     for(k in 1:ncol(B))
         lines(x, B[,k])
 }
-predFn <- function(ydata, Dmax) {
+predFn <- function(ydata, Dmax, h=14) {
     Date <- ydata[, ncol(ydata)]
     ydata <- ydata[, 1:(ncol(ydata)-1), drop = FALSE]
     dmin <- min(Date)
     D0 <- rev(seq(Dmax, dmin - 1, -1))
     iday <- as.integer(difftime(Date, dmin, units = "day"))+1
     iday0 <- as.integer(difftime(D0, dmin, units = "day"))+1
-    bk0 <- rev(seq(max(iday0), -5, -20))
+    bk0 <- rev(seq(max(iday0), -h/2, -h))
     B <- correctedBS2(x = iday0, knots = bk0)
     ff <- update(y ~ 1, paste(".~.+", paste0(colnames(B), collapse = "+")))
     fits <- lapply(ydata, function(y)
@@ -113,6 +113,7 @@ cores <- c("red", "green4", ##"orange", "blue", "brown", "gray",
 
 ### RESULTADOS da eleicao em 2022
 ntot22 <- c(123682372, 124252796)
+bni22t1 <- c(1964779 + 3487874)
 nres22t1 <- c(Lula      = 57259504,
               Bolsonaro = 51072345,
               "Outros + BNI" =
@@ -143,7 +144,7 @@ png("pesquisas2022.png", 3000, 2000, res = 300)
 par(mfrow = c(2, 1), mar = c(3,3,0,0),
     mgp = c(2,1.0,0), bty = "n", las = 1)
 for(k in 1:2) {
-    datFitPlotfn(dat22[[k]], Preds22b[[k]], 
+    datFitPlotfn(dat22[[k]], Preds22[[k]], 
                  ylim = c(0,60), xlim = c(Dmin22[k], Dmax22[k]+20), 
                  col = cores, fill = c(rgb(1:0, c(.5,1), c(0,.5), .5), gray(.5,.5)),
                  xlab = "", ylab = "%")
@@ -170,15 +171,13 @@ system("eog pesquisas2022.png &")
 library(jsonlite)
 
 url26t1 <- paste0(
-    "https://raw.githubusercontent.com/",
-    "bocadojacare/agregador-eleicoes-2026/main/",
-    "data/primeiro_turno/pesquisas_2026.json"
-)
+    "https://raw.githubusercontent.com/bocadojacare/",
+    "agregador-eleicoes-2026/refs/heads/main/data/",
+    "primeiro_turno/pesquisas_2026_normalizado.json")
 url26t2 <- paste0(
-    "https://raw.githubusercontent.com/",
-    "bocadojacare/agregador-eleicoes-2026/refs/heads/main/",
-    "data/segundo_turno/pesquisas_segundo_turno.json"
-)
+    "https://raw.githubusercontent.com/bocadojacare/",
+    "agregador-eleicoes-2026/refs/heads/main/data/",
+    "segundo_turno/pesquisas_segundo_turno_normalizado.json")
 
 if(!file.exists("bdj2026t1.rds")) {
     d26t1 <- as.data.frame(fromJSON(url26t1, flatten = TRUE))
@@ -197,9 +196,39 @@ if(!file.exists("bdj2026t2.rds")){
     d26t2 <- readRDS("bdj2026t2.rds")
 }
 
+if(FALSE) {
+    
+    urlplc <- "https://www.placardaspesquisas.com.br/data/polls.csv"
+    
+    if(!file.exists("alldplc.csv"))
+        download.file(urlplc, "alldplc.csv")
+    
+    alldplc <- read.csv(
+        "alldplc.csv",
+        stringsAsFactors = FALSE,
+        check.names = FALSE
+    )
+    
+    table(alldplc$race, alldplc$round)
+    
+    dplc <- split(alldplc[alldplc$race == "presidente", ],
+                  alldplc[alldplc$race == "presidente",]["round"])
+    
+    sapply(dplc, dim)
+
+}
+
 dat26 <- list(t1 = d26t1[, c(3,4,ncol(d26t1))],
-              t2 = d26t2[,  c(3,4,ncol(d26t2))])
+              t2 = d26t2[, c(3,4,ncol(d26t2))])
 sapply(dat26, nrow)
+
+if(FALSE) {
+    dAddT1 <- data.frame(
+        Lula = c(45, 46, 47.8, 43),
+        Flávio = c(42, 45, 42.1, 47))
+    dAddT1$"Outros + BNI" <- 100 -rowSums(dAddT1)
+    dat26$t1 <- rbind(dat26$t1, dAddT1)
+}
 
 ## fix the data
 dfn <- function(x) {
@@ -215,15 +244,20 @@ dfn <- function(x) {
         substring(x[i], nch[i]-10))
     as.Date(dspl, format = "%d %b %Y")
 }
-dat26[[1]]$Data <- dfn(d26t1$data)
+
+dat26[[1]]$Data <- ##c(
+    dfn(d26t1$data)
+##                   , as.Date(rep("2026-10-03", nrow(dAddT1))))
 dat26[[2]]$Data <- dfn(d26t2$data)
+
+##tail(d26t1[order(dat26[[1]]$Data), c(1,2,3,4, 10)], 10)
 
 lapply(dat26, head, 2)
 
 alldat <- c(dat22, dat26)
 Dmin <- as.Date(c(Dmin22, "2026-01-21", "2026-02-01"))
 Dmax <- as.Date(c(Dmax22, "2026-10-04", "2026-10-04"))
-yadd <- c(20,5,10,10)
+yadd <- c(20,5,20,10)
 
 Preds26 <- lapply(1:2, function(k)
     predFn(dat26[[k]], Dmax[2+k]))
@@ -231,7 +265,7 @@ Preds26 <- lapply(1:2, function(k)
 png("fourplots.png", 6000, 4000, res = 300)
 par(mfcol = c(2, 2), mar = c(3,3,0,0),
     mgp = c(2,1.0,0), bty = "n", las = 1)
-for(k in 1:4) {
+for(k in c(1:4)) {
     prdk <- c(Preds22, Preds26)[[k]]
     datFitPlotfn(alldat[[k]], prdk, 
                  ylim = c(0,55), xlim = c(Dmin[k], Dmax[k]+yadd[k]),
@@ -258,3 +292,23 @@ system("eog fourplots.png &")
 
 tail(Preds26[[1]]$Lula, 1)
 tail(Preds26[[1]]$Fl, 1)
+
+tail(d26t1[order(dat26[[1]]$Data), c(1,2,3,4)])
+
+## 2022
+r22c <- data.frame(
+    poolPesquias=sapply(Preds22[[1]], function(x)
+        tail(x$fit,1)),
+    resultado = result22[[1]])
+r22c$diff <- r22c$res - r22c$poolP ## absolute difference
+r22c$drel <- r22c$diff/r22c$poolP  ## relative difference
+r22c
+
+## 2026
+r26c <- data.frame(
+    poolPesq=sapply(Preds26[[1]], 
+                    function(x) tail(x$fit,1)))
+## if same diff as 2022
+data.frame(r26c,
+           prev=r26c$poolPesq * (r22c$drel+1))
+
