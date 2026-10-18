@@ -1,5 +1,6 @@
-setwd(here::here("eleitorais"))
+setwd(here::here(""))
 getwd()
+source("functions.R")
 
 ###########################################################################
 ### Main source of pesquisas eleitorais data in em 2022:
@@ -140,24 +141,10 @@ if(!file.exists("data/bdj2026t2.rds")){
 }
 
 ## fix the data
-dfn <- function(x) {
-    x <- gsub("Fev", "Feb", x)
-    x <- gsub("Abr", "Apr", x)
-    x <- gsub("Mai", "May", x)
-    x <- gsub("Ago", "Aug", x)
-    x <- gsub("Set", "Sep", x)
-    x <- gsub("Out", "Oct", x)
-    x <- gsub("Dez", "Dec", x)
-    nch <- nchar(x)
-    dspl <- sapply(1:length(x), function(i)
-        substring(x[i], nch[i]-10))
-    as.Date(dspl, format = "%d %b %Y")
-}
-
 dat26 <- list(
-    t1 = data.frame(Data = dfn(d26t1$data),
+    t1 = data.frame(Data = fixDataFn(d26t1$data),
                     d26t1[, c(3,4, -1:0+ncol(d26t1))]),
-    t2 = data.frame(Data = dfn(d26t2$data),
+    t2 = data.frame(Data = fixDataFn(d26t2$data),
                     d26t2[, c(3,4,ncol(d26t2))])
 )
 sapply(dat26, nrow)

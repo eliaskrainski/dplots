@@ -1,3 +1,19 @@
+
+## fix the data
+fixDataFn <- function(x) {
+    x <- gsub("Fev", "Feb", x)
+    x <- gsub("Abr", "Apr", x)
+    x <- gsub("Mai", "May", x)
+    x <- gsub("Ago", "Aug", x)
+    x <- gsub("Set", "Sep", x)
+    x <- gsub("Out", "Oct", x)
+    x <- gsub("Dez", "Dec", x)
+    nch <- nchar(x)
+    dspl <- sapply(1:length(x), function(i)
+        substring(x[i], nch[i]-10))
+    as.Date(dspl, format = "%d %b %Y")
+}
+
 predFn <- function(ydata, Dmax, jcol=1) {
     Date <- ydata[, jcol]
     ydata <- ydata[, setdiff(1:ncol(ydata),jcol), drop = FALSE]
