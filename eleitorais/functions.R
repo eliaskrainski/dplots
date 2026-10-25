@@ -69,9 +69,9 @@ basisPlot <- function(x, B) {
     for(k in 1:ncol(B))
         lines(x, B[,k])
 }
-predFn1 <- function(ydata, Dmax, h=21) {
-    Date <- ydata[, ncol(ydata)]
-    ydata <- ydata[, 1:(ncol(ydata)-1), drop = FALSE]
+predFn1 <- function(ydata, Dmax, h=21, jcol=1) {
+    Date <- ydata[, jcol]
+    ydata <- ydata[, setdiff(1:ncol(ydata),jcol), drop = FALSE]
     dmin <- min(Date)
     D0 <- rev(seq(Dmax, dmin - 1, -1))
     iday <- as.integer(difftime(Date, dmin, units = "day"))+1
@@ -91,9 +91,9 @@ predFn1 <- function(ydata, Dmax, h=21) {
     })
     return(preds)
 }
-predFn2 <- function(ydata, Dmax) {
-    Date <- ydata[, ncol(ydata)]
-    ydata <- ydata[, 1:(ncol(ydata)-1), drop = FALSE]
+predFn2 <- function(ydata, Dmax, jcol = 1) {
+    Date <- ydata[, jcol]
+    ydata <- ydata[, setdiff(1:ncol(ydata), jcol), drop = FALSE]
     dmin <- min(Date)
     D0 <- rev(seq(Dmax, dmin - 1, -1))
     iday <- as.integer(difftime(Date, dmin, units = "day"))+1

@@ -16,8 +16,35 @@ for(i in 1:2) {
         gsub(paste0(i, "t"),
              paste0("turno", i), fls22[i]))
 }
-fls22used <- c(fls22local[1], gsub("2", "2_atualizado", fls22local[2]))
+fls22used <- c(gsub("1", "1u", fls22local[1]),
+               gsub("2", "2u_atualizado", fls22local[2]))
+fls22used
 names(fls22used) <- names(fls22local) <- names(fls22) <- c("turno1", "turno2")
+
+
+instts <- c(
+    "Alfa" = c("Alfa Inteligência", "Alfa/TMC"),
+    "Apex/Futura" = "Apex/Futura",
+    "Atlas" = c("Atlas", "Atlasinstel", "AtlasIntel"),
+    "Brasmarket" = "Brasmarket",
+    "BTG/Nexus" = c("BTG/Nexus", "Nexus/BTG", "Nexus/BTG Pactual"),
+    "CNT/MDA" = c("CNT/MDA", "MDA"),
+    "Datafolha" = c("Datafolha", "DataFolha"),
+    "FSB" = "FSB",
+    "Futura" = c("Futura", "Futura/Apex"),  
+    "Genial/Quaest" = c("Genial/Quaest", "Quaest"),
+    "Gerp" = "Gerp",
+    "Idiea/BD/M" = c("Ideia", "Ideia Big Data", "Meio/Ideia"),
+    "Indexa" = c("Indexa", "Indexa/Broadcast"),
+    "Ipec" = c("Ipec", "Ipsos-Ipec"),
+    "Ipespe" = "Ipespe",
+    "Palver" = "Palver", 
+    "Parana" = "Paraná Pesquisas",            
+    "PoderData" = c("PoderData", "PoderData/Aya"),
+    "Real Time Big Data" = "Real Time Big Data",
+    "Verita" = c("Verita", "Veritá"),
+    "Vox" = c("Vox", "Vox Brasil")
+)
 
 if((!file.exists(fls22used[1])) &
    (!file.exists(fls22used[1]))) {
@@ -52,18 +79,37 @@ if((!file.exists(fls22used[1])) &
 
     nrow(add22t2)
 
+    str(rbind(add22t2, dat22a$turno2))
+
     dat22a$turno2 <- rbind(add22t2, dat22a$turno2)
     print(c(nr=sapply(dat22a, nrow)))
 
     lapply(dat22a, head, 2)
+
+    table(c(dat22a$turno1$Instituto,
+            dat22a$turno2$Instituto))
+
+    inst22 <- list(t1=rep("Outros", nrow(dat22a$turno1)),
+                   t2=rep("Outros", nrow(dat22a$turno2)))
+    for(k in 1:2) {
+        for(j in 1:length(instts)) {
+            jj <- dat22a[[k]]$Instituto %in% instts[j]
+            inst22[[k]][jj] <- names(instts)[j]
+        }
+    }
+
+    table(dat22a[[1]]$Instituto, inst22[[1]])
+    sapply(inst22, table)
     
     dat22 <- list(
         t1 = data.frame(
+            Instituto = dat22a$turno1$Instituto,
             Data = as.Date(dat22a$turno1$Data),
             dat22a$turno1[, 5:6],
             Outros = rowSums(dat22a$turno1[, 7:9], na.rm = TRUE),
             BNI = dat22a$turno1$BNI),
         t2 = data.frame(
+            Instituto = dat22a$turno2$Instituto,
             Data = as.Date(dat22a$turno2$Data),
             dat22a$turno2[, 5:7])
     )
@@ -140,6 +186,10 @@ if(!file.exists("data/bdj2026t2.rds")){
     d26t2 <- readRDS("data/bdj2026t2.rds")
 }
 
+if(FALSE) {
+    table(c(d26t1$instituto, d26t2$instituto))
+}
+
 ## fix the data
 dat26 <- list(
     t1 = data.frame(Data = fixDataFn(d26t1$data),
@@ -153,7 +203,7 @@ lapply(dat26, head, 2)
 
 alldat <- c(dat22, dat26)
 Dmin <- as.Date(c(Dmin22, "2026-01-21", "2026-02-01"))
-Dmax <- as.Date(c(Dmax22, "2026-10-04", "2026-10-16"))
+Dmax <- as.Date(c(Dmax22, "2026-10-04", Sys.Date()))
 
 ntot26 <- c(t1=125275835, NA) ## 2022 : c(123682372, 124252796)
 bni26 <- c(t1=2300798 + 3674249, t2=NA) ## 2022 : c(1964779 + 3487874)

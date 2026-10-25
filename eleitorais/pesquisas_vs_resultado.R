@@ -1,16 +1,17 @@
 library(mgcv)
 
-setwd(here::here("eleitorais"))
+setwd(here::here(""))
+getwd()
 
 source("datasets_prepare.R")
 source("functions.R")
 
 cores4 <- c("red", "green4", "blue4", "black")
 fill4 <- c(rgb(2:0/2, c(.3,1,.5), 0:2/2, 0.5), gray(0.5,0.5))
-xadd <- c(35,10,35,10)
+xadd <- c(35,10,35,20)
 
 Preds22 <- lapply(1:2, function(k)
-    predFn(dat22[[k]], Dmax22[k]))##, h = 30))
+    predFn(dat22[[k]][, -1], Dmax22[k]))##, h = 30))
 
 png("pesquisas2022.png", 3000, 2000, res = 300)
 par(mfrow = c(2, 1), mar = c(3,3,0,0),
@@ -18,44 +19,7 @@ par(mfrow = c(2, 1), mar = c(3,3,0,0),
 for(k in 1:2) {
     coresk <- cores4
     fillk <- fill4
-    if(k==2) {if(!file.exists("data/bdj2026t2.rds")){
-    d26t2 <- as.data.frame(fromJSON(url26t2, flatten = TRUE))
-    colnames(d26t2) <- gsub("candidatos.", "", colnames(d26t2), fixed = TRUE)
-    d26t2$BNI <- 100-rowSums(d26t2[, 3:4], na.rm=TRUE)
-    saveRDS(d26t2, "data/bdj2026t2.rds")
-} else {
-    d26t2 <- readRDS("data/bdj2026t2.rds")
-}
-
-## fix the data
-dfn <- function(x) {
-    x <- gsub("Fev", "Feb", x)
-    x <- gsub("Abr", "Apr", x)
-    x <- gsub("Mai", "May", x)
-    x <- gsub("Ago", "Aug", x)
-    x <- gsub("Set", "Sep", x)
-    x <- gsub("Out", "Oct", x)
-    x <- gsub("Dez", "Dec", x)
-    nch <- nchar(x)
-    dspl <- sapply(1:length(x), function(i)
-        substring(x[i], nch[i]-10))
-    as.Date(dspl, format = "%d %b %Y")
-}
-
-dat26 <- list(
-    t1 = data.frame(Data = dfn(d26t1$data),
-                    d26t1[, c(3,4, -1:0+ncol(d26t1))]),
-    t2 = data.frame(Data = dfn(d26t2$data),
-                    d26t2[, c(3,4,ncol(d26t2))])
-)
-sapply(dat26, nrow)
-
-lapply(dat26, head, 2)
-
-alldat <- c(dat22, dat26)
-Dmin <- as.Date(c(Dmin22, "2026-01-21", "2026-02-01"))
-Dmax <- as.Date(c(Dmax22, "2026-10-04", "2026-10-16"))
-
+    if(k==2) {
         coresk <- cores4[-3]
         fillk <- fill4[-3]
     }
@@ -82,10 +46,16 @@ system("eog pesquisas2022.png &")
 ##################################################################################
 ### Dados de pesquisas eleitorais em 2026
 ##################################################################################
-Preds26 <- lapply(1:2, function(k)
-    predFn(dat26[[k]], Dmax[2+k]))
+##library(splines)
+dat26 <- lapply(dat26, function(d) d[d$BNI>0,])
+alldat <- c(lapply(dat22, function(d) d[,-1]),dat26)
+Preds26 <- lapply(1:2, function(k) {
+    predFn(dat26[[k]], Dmax[2+k])
+})
 
-png("fourplots.png", 6000, 4000, res = 300)
+fl4 <- paste0("fourplots_at", Sys.Date(), ".png")
+png(fl4, 6000, 4000, res = 300)
+
 par(mfcol = c(2, 2), mar = c(3,3,0,0),
     mgp = c(2,1.0,0), bty = "n", las = 1)
 for(k in c(1:4)) {
@@ -110,7 +80,7 @@ for(k in c(1:4)) {
                          ":", nrow(alldat[[k]]), " pesquisas"))
     pk <-  sapply(prdk, function(p) tail(p$fit,1))
     text(rep(Dmax[k]+c(7,2,5,5)[k], length(prdk)), pk,
-         format(pk, digits = 2), col = coresk)
+         format(pk, digits = 3), col = coresk)
     if(k<3) {
         legend("topright", "", title = paste("Resultado\nNominal  Valido"), bty = 'n')
         text(rep(Dmax[k]+xadd[k]-6/k, 3), result22[[k]],
@@ -127,9 +97,10 @@ for(k in c(1:4)) {
     }
     abline(v = Dmax[k]+c(12.5,3.5,8,8)[k], col = 4, lty = 2)
 }
+
 dev.off()
 
-system("eog fourplots.png &")
+system(paste("eog", fl4, "&"))
 
 tail(Preds26[[1]]$Lula, 1)
 tail(Preds26[[1]]$Fl, 1)
@@ -143,7 +114,7 @@ rcfn <- function(k) {
                            function(x) tail(x$fit, 1)))
     d$Resultado = c(result22, result26)[[k]]
     d$diff = d$Resultado - d$p
-    d$relDiff = d$diff/d$Resultado-1
+    d$relDiff = d$diff/d$Resultado 
     d
 }
 
@@ -152,3 +123,5 @@ rc <- list(
     ano2026 = list(Turno1=rcfn(3), Turno2=rcfn(4)))
 
 lapply(rc, lapply, round, 2)
+rc$ano2026$Turno2$p / (1 - rc$ano2022$Turno2$relD)
+
