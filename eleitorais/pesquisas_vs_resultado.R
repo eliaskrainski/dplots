@@ -1,4 +1,6 @@
 library(mgcv)
+library(fmesher)
+library(INLA)
 
 setwd(here::here(""))
 getwd()
@@ -11,7 +13,7 @@ fill4 <- c(rgb(2:0/2, c(.3,1,.5), 0:2/2, 0.5), gray(0.5,0.5))
 xadd <- c(35,10,35,20)
 
 Preds22 <- lapply(1:2, function(k)
-    predFn(dat22[[k]][, -1], Dmax22[k]))##, h = 30))
+    predFn2(dat22[[k]][, -1], Dmax22[k], h = 14))
 
 png("pesquisas2022.png", 3000, 2000, res = 300)
 par(mfrow = c(2, 1), mar = c(3,3,0,0),
@@ -23,7 +25,7 @@ for(k in 1:2) {
         coresk <- cores4[-3]
         fillk <- fill4[-3]
     }
-    datFitPlotfn(dat22[[k]], prd=Preds22[[k]], 
+    datFitPlotfn(dat22[[k]][,-1], prd=Preds22[[k]], 
                  ylim = c(0,60), xlim = c(Dmin22[k], Dmax22[k]+20), 
                  col = coresk, fill = fillk, 
                  xlab = "", ylab = "%")
@@ -50,7 +52,7 @@ system("eog pesquisas2022.png &")
 dat26 <- lapply(dat26, function(d) d[d$BNI>0,])
 alldat <- c(lapply(dat22, function(d) d[,-1]),dat26)
 Preds26 <- lapply(1:2, function(k) {
-    predFn(dat26[[k]], Dmax[2+k])
+    predFn2(dat26[[k]], Dmax[2+k], h = 21)
 })
 
 fl4 <- paste0("fourplots_at", Sys.Date(), ".png")
@@ -88,7 +90,7 @@ for(k in c(1:4)) {
         text(rep(Dmax[k]+xadd[k]+4/k, 2), res22[[k]],
              format(res22[[k]], digits = 3), col = coresk)
     }
-    if(k==3) {
+    if(k>=3) {
         legend("topright", "", title = paste("Resultado\nNom  Val"), bty = 'n')
         text(rep(Dmax[k]+xadd[k]-4, 3), result26[[k-2]],
              format(result26[[k-2]], digits = 3), col = coresk)
@@ -110,7 +112,7 @@ tail(d26t1[order(dat26[[1]]$Data), c(1,2,3,4)])
 ## 2022 and 2026
 rcfn <- function(k) {
     d <- data.frame(
-        poolPesquisas = sapply(c(Preds22, Preds26)[[k]],
+        pools = sapply(c(Preds22, Preds26)[[k]],
                            function(x) tail(x$fit, 1)))
     d$Resultado = c(result22, result26)[[k]]
     d$diff = d$Resultado - d$p
@@ -122,6 +124,6 @@ rc <- list(
     ano2022 = list(Turno1=rcfn(1), Turno2=rcfn(2)),
     ano2026 = list(Turno1=rcfn(3), Turno2=rcfn(4)))
 
-lapply(rc, lapply, round, 2)
-rc$ano2026$Turno2$p / (1 - rc$ano2022$Turno2$relD)
+lapply(rc, function(x) round(x$Turno1, digits = 2))
+lapply(rc, function(x) round(x$Turno2, digits = 2))
 

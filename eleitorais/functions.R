@@ -91,24 +91,30 @@ predFn1 <- function(ydata, Dmax, h=21, jcol=1) {
     })
     return(preds)
 }
-predFn2 <- function(ydata, Dmax, jcol = 1) {
+predFn2 <- function(ydata, Dmax, jcol = 1, h = 1) {
     Date <- ydata[, jcol]
     ydata <- ydata[, setdiff(1:ncol(ydata), jcol), drop = FALSE]
     dmin <- min(Date)
-    D0 <- rev(seq(Dmax, dmin - 1, -1))
-    iday <- as.integer(difftime(Date, dmin, units = "day"))+1
+    D0 <- rev(seq(Dmax, dmin - h, -h))
     ivalues <- as.integer(difftime(D0, dmin, units = "day"))+1
+    iday <- as.integer(difftime(Date, dmin, units = "day"))+1
+    idd <- 1:as.integer(difftime(Dmax, dmin, units = "day"))
+    nd <- length(iday)
     np <- length(ivalues)
-    ff <- y ~ 0 + f(i, model = "rw2", values = ivalues, constr = FALSE)
+    ndd <- length(idd)
+    mesh1d <- fm_mesh_1d(ivalues, degree = 2)
+    Z <- fm_evaluator(mesh1d, c(idd, iday))$proj$A
+    ff <- y ~ 0 + f(ii, model = "rw2", A.local = Z, values = ivalues)
     preds <- lapply(ydata, function(y) {
-        dat <- data.frame(i = c(ivalues, iday),
-                          y = c(rep(NA, np), y))
-        r <- inla(ff, data = dat)
-        fitt <- r$summary.fitted.values[1:np, ]
+        dat <- data.frame(ii = rep(NA, ndd+nd), 
+                          y = c(rep(NA, ndd), y))
+        r <- inla(ff, data = dat,
+                  control.predictor = list(link=1))
+        fitt <- r$summary.fitted.values[1:ndd, ]
         prd <- data.frame(
-            Date = D0, fit = fitt$mean,
-            low = fitt[, 3]-1.96*fitt$sd,
-            upp = fitt[, 5]+1.96*fitt$sd)
+            Date = dmin+idd-1, fit = fitt$mean,
+            low = fitt[, 3],
+            upp = fitt[, 5])
     })
     return(preds)
 }

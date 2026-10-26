@@ -1,5 +1,13 @@
+library(fmesher)
+library(INLA)
+library(mgcv)
 
-allpools <- read.csv("https://www.placardaspesquisas.com.br/data/polls.csv")
+forceDownload <- FALSE
+if(forceDownload || (!file.exists("data/placar_pools.csv"))) {
+    download.file("https://www.placardaspesquisas.com.br/data/polls.csv",
+                  "data/placar_pools.csv")
+}
+allpools <- read.csv("data/placar_pools.csv")
 
 table(allpools$race)
 
@@ -55,9 +63,6 @@ dataf$Dia <- as.numeric(difftime(
 head(dataf,2)
 tail(dataf,2)
 
-library(fmesher)
-library(INLA)
-
 nt <- max(dataf$Dia)
 t0 <- 1:nt
 length(tk <- rev(seq(max(dataf$Dia), -10, -21)))
@@ -68,18 +73,23 @@ tmesh$loc
 Z <- fm_evaluator(mesh = tmesh, loc = c(t0, dataf$Dia))$proj$A
 dim(Z)
 
+uInst <- sort(unique(dataf$Instituto))
+
 dfit <- data.frame(
     Dia = c(t0, dataf$Dia),
-    Validos = c(rep(1, length(t0)), dataf$Lula + dataf$Flavio),
-    Lula = c(rep(NA, length(t0)), dataf$Lula),
+    Instituto = c(rep(NA, nt), match(dataf$Instituto, uInst)),
+    Validos = c(rep(1, nt), dataf$Lula + dataf$Flavio),
+    Lula = c(rep(NA, nt), dataf$Lula),
     t = NA
 )
 
+pcp <- list(prior = "pc.prec", param = c(0.5, 0.1))
 ff <- Lula ~ 0 +
+    f(Instituto, model = "iid", hyper = list(prec = pcp)) +
     f(t, A.local = Z, constr = FALSE,
       model = "rw2", values = 1:tmesh$n,
       scale.model = TRUE,
-      hyper = list(prec = list(prior = "pc.prec", param = c(0.5, 0.1))))
+      hyper = list(prec = pcp))
 
 ifit <- inla(
     formula = ff,
@@ -90,17 +100,42 @@ ifit <- inla(
     data = dfit
 )
 
+ifit$summary.hy
+spm <- lapply(ifit$internal.marginals.hyperpar, function(m)
+    inla.tmarginal(function(x) exp(-x/2), m))
+sapply(spm, function(m) inla.emarginal(function(x) x, m))
+
+sInst <- data.frame(
+    Inst=uInst,
+    ifit$summary.random$Instituto[, c(2,3,4,6)])
+sInst[order(sInst$mean), ]
+
+pdat <- data.frame(Data=dataf$Data,
+                   100*dataf[c("Lula", "Flavio", "BNI")]/dataf$n)
+
+source("functions.R")
+library(splines)
+
+pL <- predFn2(data.frame(pdat$Data, Lula=pdat$Lula/(100-pdat$BNI)),
+              as.Date("2026-10-25"), h = 21)$Lula
+
 dim(prd <- ifit$summary.fitted.values[1:length(t0),])
 head(prd,3)
 
-png("pool_placar.png", 3600, 2400, res = 200)
+plotP <- FALSE
 
-par(mfrow = c(1, 2), mar = c(3,3,0.5,0.5), mgp = c(2,1,0), bty = "n")
+png("pool_placar.png", 1800*(1+plotP), 2400, res = 200)
+
+par(mfrow = c(1, 1+plotP), mar = c(4,4,1,1), mgp = c(3,1,0), bty = "n")
 with(dataf, plot(Data, Lula/(Lula+Flavio), pch = 8, col = 2))
 polygon(D0+c(t0, rev(t0),1),
         c(prd[, 3], rev(prd[,5]), prd[1,3]),
         col = gray(0.5,0.5), border = 'transparent')
 lines(D0+t0, prd$mean, lty = 2)
+lines(pL$Date, pL$fit, lty = 2, col = 2)
+polygon(c(pL$Date, rev(pL$Date), pL$Date[1]),
+        c(pL$low, rev(pL$upp), pL$low[1]),
+        col = rgb(1,.5,0,.5), border = 0)
 points(as.Date("2026-10-04"), 53879538/(53879538 + 56104503),
        col = 'green4', pch = 19)
 legend("top", paste(nrow(dataf), "pesquisas consideradas"),
@@ -114,10 +149,12 @@ legend("bottomright",
        paste0("https://www.placardaspesquisas.com.br/data/polls.csv"),
        title = "Fonte dos dados:", bty = "n")
 abline(h = 0.5, lty = 2)
-plot(inla.smarginal(ifit$marginals.fitted.values[[nt]]), type = "l",
-     xlab = "P(Lula)", ylab = "Density")
-legend("top", "", bty = "n", title = "Probabilidade (a posteriori)")
-abline(h = 0, v = 0.5, lty = 2)
+if(plotP) {
+    plot(inla.smarginal(ifit$marginals.fitted.values[[nt]]), type = "l",
+         xlab = "P(Lula)", ylab = "Density")
+    legend("top", "", bty = "n", title = "Probabilidade (a posteriori)")
+    abline(h = 0, v = 0.5, lty = 2)
+}
 
 dev.off()
 
@@ -126,3 +163,17 @@ inla.pmarginal(0.5, ifit$marginals.fitted.values[[nt]])
 
 
 system("eog pool_placar.png &")
+
+## agregador
+prds <- predFn(pdat, as.Date("2026-10-25")+1)
+
+cores3 <- c("red", "green4", "black")
+fill3 <- c(rgb(1:0, c(.3,1), 0:1/2, 0.5), gray(0.5,0.5))
+
+par(mfrow = c(1, 1), mar = c(3,3,0,0),
+    mgp = c(2,1.0,0), bty = "n", las = 1)
+datFitPlotfn(pdat, prd = prds, 
+             ylim = c(0,60), xlim = range(pdat$Data), 
+             col = cores3, fill = fill3, 
+             xlab = "", ylab = "%")
+abline(h = 10*(0:5), lty = 2, col = gray(0.5))
